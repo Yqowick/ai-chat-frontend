@@ -1,19 +1,25 @@
+import { Button } from "@/components/ui/button"
+
 function App() {
   return (
-    <main className="flex min-h-screen items-center justify-center bg-slate-950">
-      <div className="rounded-2xl border border-slate-700 bg-slate-900 p-10 text-center shadow-2xl">
-        <h1 className="text-4xl font-bold text-white">
+    <main className="flex min-h-screen items-center justify-center bg-background text-foreground">
+      <section className="w-full max-w-lg rounded-2xl border bg-card p-10 text-center shadow-xl">
+        <p className="mb-2 text-sm font-medium text-muted-foreground">
+          Frontend setup
+        </p>
+
+        <h1 className="text-4xl font-bold tracking-tight">
           AI Chat Frontend
         </h1>
 
-        <p className="mt-4 text-lg text-slate-400">
-          React, TypeScript, Vite and Tailwind CSS are ready.
+        <p className="mt-4 text-muted-foreground">
+          React, TypeScript, Tailwind CSS and shadcn/ui are ready.
         </p>
 
-        <button className="mt-6 rounded-lg bg-blue-600 px-6 py-3 font-medium text-white transition hover:bg-blue-500">
+        <Button className="mt-6">
           Start Chatting
-        </button>
-      </div>
+        </Button>
+      </section>
     </main>
   )
 }
