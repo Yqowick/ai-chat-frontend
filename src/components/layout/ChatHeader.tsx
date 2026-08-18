@@ -1,6 +1,7 @@
 import { Bot, Trash2 } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { apiConfig } from "@/config/api"
 
 interface ChatHeaderProps {
   onClearChat: () => void
@@ -9,6 +10,10 @@ interface ChatHeaderProps {
 export function ChatHeader({
   onClearChat,
 }: ChatHeaderProps) {
+  const apiLabel = apiConfig.useMockApi
+    ? "Mock API"
+    : "Gemini API"
+
   return (
     <header className="flex h-16 items-center justify-between border-b bg-background px-4 sm:px-6">
       <div className="flex items-center gap-3">
@@ -25,7 +30,7 @@ export function ChatHeader({
             <span className="size-2 rounded-full bg-emerald-500" />
 
             <p className="text-xs text-muted-foreground">
-              Online · Mock API
+              Online {"\u00B7"} {apiLabel}
             </p>
           </div>
         </div>

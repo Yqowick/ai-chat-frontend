@@ -9,10 +9,17 @@ export function ChatPage() {
   const {
     messages,
     isResponding,
+    isLoadingHistory,
     error,
     sendMessage,
     clearChat,
   } = useChat()
+
+  const isAssistantStreaming =
+    messages.at(-1)?.role === "assistant" &&
+    messages.at(-1)?.status === "sending"
+
+  const isBusy = isResponding || isLoadingHistory
 
   return (
     <div className="flex h-svh flex-col bg-muted/30">
@@ -21,7 +28,9 @@ export function ChatPage() {
       <main className="min-h-0 flex-1">
         <MessageList
           messages={messages}
-          isResponding={isResponding}
+          isResponding={
+            isBusy && !isAssistantStreaming
+          }
         />
       </main>
 
@@ -38,7 +47,7 @@ export function ChatPage() {
       )}
 
       <ChatInput
-        isResponding={isResponding}
+        isResponding={isBusy}
         onSendMessage={sendMessage}
       />
     </div>
