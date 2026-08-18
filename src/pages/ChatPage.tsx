@@ -4,6 +4,7 @@ import { AlertCircle } from "lucide-react"
 import { ChatHeader } from "@/components/layout/ChatHeader"
 import { ChatInput } from "@/features/chat/components/ChatInput"
 import { ConversationSidebar } from "@/features/chat/components/ConversationSidebar"
+import { GuidedTour } from "@/features/chat/components/GuidedTour"
 import { MessageList } from "@/features/chat/components/MessageList"
 import { useChat } from "@/features/chat/hooks/useChat"
 
@@ -32,8 +33,10 @@ export function ChatPage() {
   } = useChat()
 
   const isAssistantStreaming =
-    messages.at(-1)?.role === "assistant" &&
-    messages.at(-1)?.status === "sending"
+    messages.at(-1)?.role ===
+      "assistant" &&
+    messages.at(-1)?.status ===
+      "sending"
 
   const isInterfaceBusy =
     isResponding ||
@@ -41,7 +44,8 @@ export function ChatPage() {
     isPerformingMessageAction
 
   const shouldShowThinkingIndicator =
-    (isResponding || isLoadingHistory) &&
+    (isResponding ||
+      isLoadingHistory) &&
     !isAssistantStreaming
 
   function handleNewConversation() {
@@ -52,18 +56,32 @@ export function ChatPage() {
   function handleSelectConversation(
     selectedConversationId: string,
   ) {
-    selectConversation(selectedConversationId)
+    selectConversation(
+      selectedConversationId,
+    )
+
     setIsSidebarOpen(false)
   }
 
   return (
     <div className="flex h-svh overflow-hidden bg-muted/30">
-      <aside className="hidden w-72 shrink-0 border-r md:block">
+      <aside
+        data-tour="conversation-sidebar"
+        className="hidden w-72 shrink-0 border-r md:block"
+      >
         <ConversationSidebar
-          conversations={conversations}
-          activeConversationId={conversationId}
-          isLoading={isLoadingConversations}
-          isBusy={isInterfaceBusy}
+          conversations={
+            conversations
+          }
+          activeConversationId={
+            conversationId
+          }
+          isLoading={
+            isLoadingConversations
+          }
+          isBusy={
+            isInterfaceBusy
+          }
           onNewConversation={
             handleNewConversation
           }
@@ -86,14 +104,18 @@ export function ChatPage() {
 
           <aside className="fixed inset-y-0 left-0 z-50 w-[85vw] max-w-72 border-r bg-background shadow-xl md:hidden">
             <ConversationSidebar
-              conversations={conversations}
+              conversations={
+                conversations
+              }
               activeConversationId={
                 conversationId
               }
               isLoading={
                 isLoadingConversations
               }
-              isBusy={isInterfaceBusy}
+              isBusy={
+                isInterfaceBusy
+              }
               onNewConversation={
                 handleNewConversation
               }
@@ -109,20 +131,29 @@ export function ChatPage() {
       )}
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <ChatHeader
-          isBusy={isInterfaceBusy}
-          onNewConversation={
-            handleNewConversation
-          }
-          onToggleSidebar={() =>
-            setIsSidebarOpen(true)
-          }
-        />
+        <div data-tour="header">
+          <ChatHeader
+            isBusy={
+              isInterfaceBusy
+            }
+            onNewConversation={
+              handleNewConversation
+            }
+            onToggleSidebar={() =>
+              setIsSidebarOpen(true)
+            }
+          />
+        </div>
 
-        <main className="min-h-0 flex-1">
+        <main
+          data-tour="messages"
+          className="min-h-0 flex-1"
+        >
           <MessageList
             messages={messages}
-            conversationId={conversationId}
+            conversationId={
+              conversationId
+            }
             isResponding={
               shouldShowThinkingIndicator
             }
@@ -153,11 +184,19 @@ export function ChatPage() {
           </div>
         )}
 
-        <ChatInput
-          isResponding={isInterfaceBusy}
-          onSendMessage={sendMessage}
-        />
+        <div data-tour="chat-input">
+          <ChatInput
+            isResponding={
+              isInterfaceBusy
+            }
+            onSendMessage={
+              sendMessage
+            }
+          />
+        </div>
       </div>
+
+      <GuidedTour />
     </div>
   )
 }
