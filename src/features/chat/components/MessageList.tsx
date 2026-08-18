@@ -23,10 +23,13 @@ type MessageActionType =
 
 interface MessageListProps {
   messages: ChatMessage[]
+  conversationId: string | null
   isResponding: boolean
   activeMessageActionId: string | null
   messageActionType: MessageActionType
-  onRegenerateMessage: (messageId: string) => void
+  onRegenerateMessage: (
+    messageId: string,
+  ) => void
   onSwitchMessageVersion: (
     messageId: string,
     versionIndex: number,
@@ -35,13 +38,15 @@ interface MessageListProps {
 
 export function MessageList({
   messages,
+  conversationId,
   isResponding,
   activeMessageActionId,
   messageActionType,
   onRegenerateMessage,
   onSwitchMessageVersion,
 }: MessageListProps) {
-  const bottomReference = useRef<HTMLDivElement>(null)
+  const bottomReference =
+    useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     bottomReference.current?.scrollIntoView({
@@ -68,9 +73,9 @@ export function MessageList({
             </h2>
 
             <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-              Ask a question about your documents and the AI
-              assistant will provide an answer with relevant
-              sources.
+              Ask a question about your documents and the
+              AI assistant will provide an answer with
+              relevant sources.
             </p>
           </div>
         ) : (
@@ -79,11 +84,17 @@ export function MessageList({
               <MessageBubble
                 key={message.id}
                 message={message}
+                conversationId={conversationId}
                 isActionLoading={
-                  activeMessageActionId === message.id
+                  activeMessageActionId ===
+                  message.id
                 }
-                messageActionType={messageActionType}
-                onRegenerate={onRegenerateMessage}
+                messageActionType={
+                  messageActionType
+                }
+                onRegenerate={
+                  onRegenerateMessage
+                }
                 onSwitchVersion={
                   onSwitchMessageVersion
                 }

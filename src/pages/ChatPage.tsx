@@ -8,8 +8,10 @@ import { MessageList } from "@/features/chat/components/MessageList"
 import { useChat } from "@/features/chat/hooks/useChat"
 
 export function ChatPage() {
-  const [isSidebarOpen, setIsSidebarOpen] =
-    useState(false)
+  const [
+    isSidebarOpen,
+    setIsSidebarOpen,
+  ] = useState(false)
 
   const {
     messages,
@@ -62,7 +64,9 @@ export function ChatPage() {
           activeConversationId={conversationId}
           isLoading={isLoadingConversations}
           isBusy={isInterfaceBusy}
-          onNewConversation={handleNewConversation}
+          onNewConversation={
+            handleNewConversation
+          }
           onSelectConversation={
             handleSelectConversation
           }
@@ -74,15 +78,21 @@ export function ChatPage() {
           <button
             type="button"
             className="fixed inset-0 z-40 bg-black/45 md:hidden"
-            onClick={() => setIsSidebarOpen(false)}
+            onClick={() =>
+              setIsSidebarOpen(false)
+            }
             aria-label="Close conversations"
           />
 
           <aside className="fixed inset-y-0 left-0 z-50 w-[85vw] max-w-72 border-r bg-background shadow-xl md:hidden">
             <ConversationSidebar
               conversations={conversations}
-              activeConversationId={conversationId}
-              isLoading={isLoadingConversations}
+              activeConversationId={
+                conversationId
+              }
+              isLoading={
+                isLoadingConversations
+              }
               isBusy={isInterfaceBusy}
               onNewConversation={
                 handleNewConversation
@@ -90,7 +100,9 @@ export function ChatPage() {
               onSelectConversation={
                 handleSelectConversation
               }
-              onClose={() => setIsSidebarOpen(false)}
+              onClose={() =>
+                setIsSidebarOpen(false)
+              }
             />
           </aside>
         </>
@@ -99,7 +111,9 @@ export function ChatPage() {
       <div className="flex min-w-0 flex-1 flex-col">
         <ChatHeader
           isBusy={isInterfaceBusy}
-          onNewConversation={handleNewConversation}
+          onNewConversation={
+            handleNewConversation
+          }
           onToggleSidebar={() =>
             setIsSidebarOpen(true)
           }
@@ -108,12 +122,19 @@ export function ChatPage() {
         <main className="min-h-0 flex-1">
           <MessageList
             messages={messages}
-            isResponding={shouldShowThinkingIndicator}
+            conversationId={conversationId}
+            isResponding={
+              shouldShowThinkingIndicator
+            }
             activeMessageActionId={
               activeMessageActionId
             }
-            messageActionType={messageActionType}
-            onRegenerateMessage={regenerateMessage}
+            messageActionType={
+              messageActionType
+            }
+            onRegenerateMessage={
+              regenerateMessage
+            }
             onSwitchMessageVersion={
               switchMessageVersion
             }

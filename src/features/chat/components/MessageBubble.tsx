@@ -1,5 +1,6 @@
 import {
   isValidElement,
+  useEffect,
   useState,
 } from "react"
 import type {
@@ -15,6 +16,8 @@ import {
   Copy,
   LoaderCircle,
   RefreshCw,
+  ThumbsDown,
+  ThumbsUp,
   User,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
@@ -27,8 +30,13 @@ import {
 } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { FeedbackModal } from "@/features/chat/components/FeedbackModal"
+import { submitAssistantFeedback } from "@/features/chat/services/feedbackApi"
 import "@/features/chat/styles/markdown.css"
-import type { ChatMessage } from "@/features/chat/types/chat"
+import type {
+  ChatMessage,
+  FeedbackRating,
+} from "@/features/chat/types/chat"
 import { cn } from "@/lib/utils"
 
 type MessageActionType =
@@ -38,6 +46,7 @@ type MessageActionType =
 
 interface MessageBubbleProps {
   message: ChatMessage
+  conversationId: string | null
   isActionLoading: boolean
   messageActionType: MessageActionType
   onRegenerate: (messageId: string) => void
@@ -80,13 +89,20 @@ function extractText(node: ReactNode): string {
 function MarkdownCodeBlock({
   children,
 }: ComponentPropsWithoutRef<"pre">) {
-  const [isCopied, setIsCopied] = useState(false)
+  const [isCopied, setIsCopied] =
+    useState(false)
 
-  const codeText = extractText(children).replace(/\n$/, "")
+  const codeText = extractText(children).replace(
+    /\n$/,
+    "",
+  )
 
   async function copyCode() {
     try {
-      await navigator.clipboard.writeText(codeText)
+      await navigator.clipboard.writeText(
+        codeText,
+      )
+
       setIsCopied(true)
 
       window.setTimeout(() => {
@@ -162,22 +178,47 @@ function AssistantMarkdown({
 
 export function MessageBubble({
   message,
+  conversationId,
   isActionLoading,
   messageActionType,
   onRegenerate,
   onSwitchVersion,
 }: MessageBubbleProps) {
-  const isUserMessage = message.role === "user"
+  const isUserMessage =
+    message.role === "user"
+
+  const [feedback, setFeedback] = useState(
+    message.feedback,
+  )
+
+  const [
+    pendingFeedbackRating,
+    setPendingFeedbackRating,
+  ] = useState<FeedbackRating | null>(null)
+
+  const [
+    isFeedbackSubmitting,
+    setIsFeedbackSubmitting,
+  ] = useState(false)
+
+  const [feedbackError, setFeedbackError] =
+    useState<string | null>(null)
+
+  useEffect(() => {
+    setFeedback(message.feedback)
+  }, [message.feedback])
 
   const versions = message.versions ?? []
 
   const activeVersionIndex =
     message.activeVersionIndex ?? 0
 
-  const hasMultipleVersions = versions.length > 1
+  const hasMultipleVersions =
+    versions.length > 1
 
   const canShowActions =
-    !isUserMessage && message.status === "sent"
+    !isUserMessage &&
+    message.status === "sent"
 
   const canSelectPreviousVersion =
     hasMultipleVersions &&
@@ -186,190 +227,353 @@ export function MessageBubble({
 
   const canSelectNextVersion =
     hasMultipleVersions &&
-    activeVersionIndex < versions.length - 1 &&
+    activeVersionIndex <
+      versions.length - 1 &&
     !isActionLoading
 
-  return (
-    <article
-      className={cn(
-        "flex w-full items-start gap-3",
-        isUserMessage && "flex-row-reverse",
-      )}
-    >
-      <Avatar className="size-9 shrink-0">
-        <AvatarFallback
-          className={cn(
-            isUserMessage
-              ? "bg-primary text-primary-foreground"
-              : "bg-muted text-muted-foreground",
-          )}
-        >
-          {isUserMessage ? (
-            <User className="size-4" />
-          ) : (
-            <Bot className="size-4" />
-          )}
-        </AvatarFallback>
-      </Avatar>
+  function openFeedbackModal(
+    rating: FeedbackRating,
+  ) {
+    if (
+      !conversationId ||
+      isFeedbackSubmitting
+    ) {
+      return
+    }
 
-      <div
+    setPendingFeedbackRating(rating)
+    setFeedbackError(null)
+  }
+
+  function closeFeedbackModal() {
+    if (isFeedbackSubmitting) {
+      return
+    }
+
+    setPendingFeedbackRating(null)
+    setFeedbackError(null)
+  }
+
+  async function submitFeedback(
+    comment: string,
+  ) {
+    if (
+      !conversationId ||
+      !pendingFeedbackRating
+    ) {
+      return
+    }
+
+    setIsFeedbackSubmitting(true)
+    setFeedbackError(null)
+
+    try {
+      const response =
+        await submitAssistantFeedback(
+          conversationId,
+          message.id,
+          pendingFeedbackRating,
+          comment,
+        )
+
+      setFeedback(response.message.feedback)
+      setPendingFeedbackRating(null)
+    } catch (caughtError) {
+      setFeedbackError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to save your feedback.",
+      )
+    } finally {
+      setIsFeedbackSubmitting(false)
+    }
+  }
+
+  return (
+    <>
+      <article
         className={cn(
-          "min-w-0",
-          isUserMessage
-            ? "max-w-[80%] sm:max-w-[70%]"
-            : "max-w-[88%] sm:max-w-[82%]",
+          "flex w-full items-start gap-3",
+          isUserMessage && "flex-row-reverse",
         )}
       >
+        <Avatar className="size-9 shrink-0">
+          <AvatarFallback
+            className={cn(
+              isUserMessage
+                ? "bg-primary text-primary-foreground"
+                : "bg-muted text-muted-foreground",
+            )}
+          >
+            {isUserMessage ? (
+              <User className="size-4" />
+            ) : (
+              <Bot className="size-4" />
+            )}
+          </AvatarFallback>
+        </Avatar>
+
         <div
           className={cn(
-            "rounded-2xl px-4 py-3 text-sm shadow-sm",
+            "min-w-0",
             isUserMessage
-              ? "rounded-tr-sm bg-primary text-primary-foreground"
-              : "rounded-tl-sm border bg-card text-card-foreground",
+              ? "max-w-[80%] sm:max-w-[70%]"
+              : "max-w-[88%] sm:max-w-[82%]",
           )}
         >
-          {isUserMessage ? (
-            <p className="whitespace-pre-wrap leading-6">
-              {message.content}
-            </p>
-          ) : (
-            <AssistantMarkdown content={message.content} />
-          )}
-
-          {message.sources && message.sources.length > 0 && (
-            <div className="mt-3">
-              <Separator className="mb-3" />
-
-              <p className="mb-2 text-xs font-medium">
-                Sources
+          <div
+            className={cn(
+              "rounded-2xl px-4 py-3 text-sm shadow-sm",
+              isUserMessage
+                ? "rounded-tr-sm bg-primary text-primary-foreground"
+                : "rounded-tl-sm border bg-card text-card-foreground",
+            )}
+          >
+            {isUserMessage ? (
+              <p className="whitespace-pre-wrap leading-6">
+                {message.content}
               </p>
+            ) : (
+              <AssistantMarkdown
+                content={message.content}
+              />
+            )}
 
-              <ul className="space-y-1">
-                {message.sources.map((source, index) => (
-                  <li
-                    key={`${source.title}-${index}`}
-                    className="text-xs opacity-80"
-                    title={source.url ?? source.title}
-                  >
-                    {source.url ? (
-                      <a
-                        href={source.url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="underline underline-offset-2"
-                      >
-                        {source.title}
-                      </a>
-                    ) : (
-                      source.title
+            {message.sources &&
+              message.sources.length > 0 && (
+                <div className="mt-3">
+                  <Separator className="mb-3" />
+
+                  <p className="mb-2 text-xs font-medium">
+                    Sources
+                  </p>
+
+                  <ul className="space-y-1">
+                    {message.sources.map(
+                      (source, index) => (
+                        <li
+                          key={`${source.title}-${index}`}
+                          className="text-xs opacity-80"
+                          title={
+                            source.url ??
+                            source.title
+                          }
+                        >
+                          {source.url ? (
+                            <a
+                              href={source.url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="underline underline-offset-2"
+                            >
+                              {source.title}
+                            </a>
+                          ) : (
+                            source.title
+                          )}
+                        </li>
+                      ),
                     )}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
+                  </ul>
+                </div>
+              )}
+          </div>
 
-        {canShowActions && (
-          <div className="mt-1.5 flex flex-wrap items-center gap-1">
-            <Button
-              type="button"
-              variant="ghost"
-              size="sm"
-              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
-              disabled={isActionLoading}
-              onClick={() => onRegenerate(message.id)}
-              aria-label="Regenerate response"
-              title="Regenerate response"
-            >
-              {isActionLoading &&
-              messageActionType === "regenerate" ? (
-                <LoaderCircle className="size-3.5 animate-spin" />
-              ) : (
-                <RefreshCw className="size-3.5" />
+          {canShowActions && (
+            <div className="mt-1.5 flex flex-wrap items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+                disabled={
+                  isActionLoading ||
+                  isFeedbackSubmitting
+                }
+                onClick={() =>
+                  onRegenerate(message.id)
+                }
+                aria-label="Regenerate response"
+                title="Regenerate response"
+              >
+                {isActionLoading &&
+                messageActionType ===
+                  "regenerate" ? (
+                  <LoaderCircle className="size-3.5 animate-spin" />
+                ) : (
+                  <RefreshCw className="size-3.5" />
+                )}
+
+                {isActionLoading &&
+                messageActionType ===
+                  "regenerate"
+                  ? "Regenerating..."
+                  : "Regenerate"}
+              </Button>
+
+              {hasMultipleVersions && (
+                <div className="ml-1 flex items-center gap-0.5 rounded-md border bg-background p-0.5">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    disabled={
+                      !canSelectPreviousVersion
+                    }
+                    onClick={() =>
+                      onSwitchVersion(
+                        message.id,
+                        activeVersionIndex - 1,
+                      )
+                    }
+                    aria-label="Previous response version"
+                    title="Previous response version"
+                  >
+                    <ChevronLeft className="size-3.5" />
+                  </Button>
+
+                  <span className="min-w-10 text-center text-[11px] text-muted-foreground">
+                    {activeVersionIndex + 1} /{" "}
+                    {versions.length}
+                  </span>
+
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-6"
+                    disabled={
+                      !canSelectNextVersion
+                    }
+                    onClick={() =>
+                      onSwitchVersion(
+                        message.id,
+                        activeVersionIndex + 1,
+                      )
+                    }
+                    aria-label="Next response version"
+                    title="Next response version"
+                  >
+                    {isActionLoading &&
+                    messageActionType ===
+                      "switch-version" ? (
+                      <LoaderCircle className="size-3.5 animate-spin" />
+                    ) : (
+                      <ChevronRight className="size-3.5" />
+                    )}
+                  </Button>
+                </div>
               )}
 
-              {isActionLoading &&
-              messageActionType === "regenerate"
-                ? "Regenerating..."
-                : "Regenerate"}
-            </Button>
-
-            {hasMultipleVersions && (
-              <div className="ml-1 flex items-center gap-0.5 rounded-md border bg-background p-0.5">
+              <div className="ml-1 flex items-center gap-0.5">
                 <Button
                   type="button"
                   variant="ghost"
                   size="icon"
-                  className="size-6"
-                  disabled={!canSelectPreviousVersion}
-                  onClick={() =>
-                    onSwitchVersion(
-                      message.id,
-                      activeVersionIndex - 1,
-                    )
+                  className={cn(
+                    "size-7 text-muted-foreground",
+                    feedback?.rating === "up" &&
+                      "bg-emerald-500/10 text-emerald-600",
+                  )}
+                  disabled={
+                    !conversationId ||
+                    isFeedbackSubmitting
                   }
-                  aria-label="Previous response version"
-                  title="Previous response version"
-                >
-                  <ChevronLeft className="size-3.5" />
-                </Button>
-
-                <span className="min-w-10 text-center text-[11px] text-muted-foreground">
-                  {activeVersionIndex + 1} /{" "}
-                  {versions.length}
-                </span>
-
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="icon"
-                  className="size-6"
-                  disabled={!canSelectNextVersion}
                   onClick={() =>
-                    onSwitchVersion(
-                      message.id,
-                      activeVersionIndex + 1,
-                    )
+                    openFeedbackModal("up")
                   }
-                  aria-label="Next response version"
-                  title="Next response version"
+                  aria-label="Rate response positively"
+                  title="Good response"
                 >
-                  {isActionLoading &&
-                  messageActionType ===
-                    "switch-version" ? (
+                  {isFeedbackSubmitting &&
+                  pendingFeedbackRating ===
+                    "up" ? (
                     <LoaderCircle className="size-3.5 animate-spin" />
                   ) : (
-                    <ChevronRight className="size-3.5" />
+                    <ThumbsUp className="size-3.5" />
+                  )}
+                </Button>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className={cn(
+                    "size-7 text-muted-foreground",
+                    feedback?.rating ===
+                      "down" &&
+                      "bg-destructive/10 text-destructive",
+                  )}
+                  disabled={
+                    !conversationId ||
+                    isFeedbackSubmitting
+                  }
+                  onClick={() =>
+                    openFeedbackModal("down")
+                  }
+                  aria-label="Rate response negatively"
+                  title="Response needs improvement"
+                >
+                  {isFeedbackSubmitting &&
+                  pendingFeedbackRating ===
+                    "down" ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <ThumbsDown className="size-3.5" />
                   )}
                 </Button>
               </div>
+            </div>
+          )}
+
+          {feedbackError && (
+            <p className="mt-1 px-1 text-xs text-destructive">
+              {feedbackError}
+            </p>
+          )}
+
+          <div
+            className={cn(
+              "mt-1.5 flex items-center gap-1.5 px-1 text-xs text-muted-foreground",
+              isUserMessage && "justify-end",
+            )}
+          >
+            <time dateTime={message.createdAt}>
+              {formatMessageTime(
+                message.createdAt,
+              )}
+            </time>
+
+            {message.status === "sending" && (
+              <LoaderCircle className="size-3 animate-spin" />
+            )}
+
+            {message.status === "error" && (
+              <span className="flex items-center gap-1 text-destructive">
+                <AlertCircle className="size-3" />
+                Failed
+              </span>
             )}
           </div>
-        )}
-
-        <div
-          className={cn(
-            "mt-1.5 flex items-center gap-1.5 px-1 text-xs text-muted-foreground",
-            isUserMessage && "justify-end",
-          )}
-        >
-          <time dateTime={message.createdAt}>
-            {formatMessageTime(message.createdAt)}
-          </time>
-
-          {message.status === "sending" && (
-            <LoaderCircle className="size-3 animate-spin" />
-          )}
-
-          {message.status === "error" && (
-            <span className="flex items-center gap-1 text-destructive">
-              <AlertCircle className="size-3" />
-              Failed
-            </span>
-          )}
         </div>
-      </div>
-    </article>
+      </article>
+
+      <FeedbackModal
+        isOpen={
+          pendingFeedbackRating !== null
+        }
+        rating={pendingFeedbackRating}
+        initialComment={
+          feedback?.rating ===
+          pendingFeedbackRating
+            ? feedback.comment
+            : ""
+        }
+        isSubmitting={isFeedbackSubmitting}
+        onClose={closeFeedbackModal}
+        onSubmit={submitFeedback}
+      />
+    </>
   )
 }

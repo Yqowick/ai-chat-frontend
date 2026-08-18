@@ -1,9 +1,9 @@
 import { apiConfig } from "@/config/api"
 import type {
   ChatMessage,
-  ChatMessageVersion,
   ChatRole,
   ConversationHistoryResponse,
+  FeedbackRating,
   SendMessageRequest,
   SendMessageResponse,
   StreamMessageHandlers,
@@ -16,6 +16,13 @@ interface ApiMessageVersion {
   createdAt: string
 }
 
+interface ApiMessageFeedback {
+  rating: FeedbackRating
+  comment: string
+  createdAt: string
+  updatedAt: string
+}
+
 interface ApiMessage {
   id: string
   role: ChatRole
@@ -23,6 +30,7 @@ interface ApiMessage {
   createdAt: string
   versions?: ApiMessageVersion[]
   activeVersionIndex?: number
+  feedback?: ApiMessageFeedback
 }
 
 interface ApiSendMessageResponse {
@@ -42,28 +50,22 @@ interface ApiConversationHistoryResponse {
 interface ApiStreamEventData {
   conversationId?: string
   text?: string
-  message?: string | ApiMessage
+  message?: string
 }
 
-function toChatMessage(message: ApiMessage): ChatMessage {
-  const versions: ChatMessageVersion[] | undefined =
-    message.versions?.map((version) => ({
-      id: version.id,
-      content: version.content,
-      createdAt: version.createdAt,
-    }))
-
+function toChatMessage(
+  message: ApiMessage,
+): ChatMessage {
   return {
     id: message.id,
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
     status: "sent",
-    versions,
+    versions: message.versions,
     activeVersionIndex:
-      message.role === "assistant"
-        ? message.activeVersionIndex ?? 0
-        : undefined,
+      message.activeVersionIndex,
+    feedback: message.feedback,
   }
 }
 
@@ -107,7 +109,9 @@ export async function sendRealMessage(
 
   const assistantMessage = [...data.messages]
     .reverse()
-    .find((message) => message.role === "assistant")
+    .find(
+      (message) => message.role === "assistant",
+    )
 
   if (!assistantMessage) {
     throw new Error(
@@ -183,8 +187,12 @@ export async function streamRealMessage(
       )
 
       const dataLines = lines
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trim())
+        .filter((line) =>
+          line.startsWith("data:"),
+        )
+        .map((line) =>
+          line.slice(5).trim(),
+        )
 
       if (dataLines.length === 0) {
         continue
@@ -217,21 +225,18 @@ export async function streamRealMessage(
         handlers.onChunk(eventData.text)
       }
 
-      if (
-        eventName === "done" &&
-        eventData.conversationId
-      ) {
-        resolvedConversationId =
-          eventData.conversationId
+      if (eventName === "done") {
+        if (eventData.conversationId) {
+          resolvedConversationId =
+            eventData.conversationId
+        }
       }
 
       if (eventName === "error") {
-        const errorMessage =
-          typeof eventData.message === "string"
-            ? eventData.message
-            : "The response stream failed."
-
-        throw new Error(errorMessage)
+        throw new Error(
+          eventData.message ||
+            "The response stream failed.",
+        )
       }
     }
   }
