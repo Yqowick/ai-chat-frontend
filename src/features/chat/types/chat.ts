@@ -1,13 +1,18 @@
-export type ChatRole = "user" | "assistant"
+export type ChatRole =
+  | "user"
+  | "assistant"
 
 export type MessageStatus =
   | "sending"
   | "sent"
   | "error"
 
-export type FeedbackRating = "up" | "down"
+export type FeedbackRating =
+  | "up"
+  | "down"
 
 export interface ChatSource {
+  citationNumber?: number
   title: string
   url?: string
 }
@@ -16,6 +21,7 @@ export interface ChatMessageVersion {
   id: string
   content: string
   createdAt: string
+  sources?: ChatSource[]
 }
 
 export interface ChatMessageFeedback {
@@ -59,7 +65,10 @@ export interface StreamMessageHandlers {
   onConversationId: (
     conversationId: string,
   ) => void
-  onChunk: (text: string) => void
+
+  onChunk: (
+    text: string,
+  ) => void
 }
 
 export interface StreamMessageResult {
@@ -76,13 +85,16 @@ export interface ConversationSummary {
   conversationId: string
   title: string
   messageCount: number
-  lastMessage: ConversationLastMessage | null
+  lastMessage:
+    | ConversationLastMessage
+    | null
   createdAt: string
   updatedAt: string
 }
 
 export interface ConversationListResponse {
-  conversations: ConversationSummary[]
+  conversations:
+    ConversationSummary[]
 }
 
 export interface MessageActionResponse {

@@ -2,6 +2,7 @@ import { apiConfig } from "@/config/api"
 import type {
   ChatMessage,
   ChatRole,
+  ChatSource,
   ConversationHistoryResponse,
   FeedbackRating,
   SendMessageRequest,
@@ -14,6 +15,7 @@ interface ApiMessageVersion {
   id: string
   content: string
   createdAt: string
+  sources?: ChatSource[]
 }
 
 interface ApiMessageFeedback {
@@ -28,6 +30,7 @@ interface ApiMessage {
   role: ChatRole
   content: string
   createdAt: string
+  sources?: ChatSource[]
   versions?: ApiMessageVersion[]
   activeVersionIndex?: number
   feedback?: ApiMessageFeedback
@@ -36,6 +39,7 @@ interface ApiMessage {
 interface ApiSendMessageResponse {
   conversationId: string
   reply: string
+  sources?: ChatSource[]
   messages: ApiMessage[]
 }
 
@@ -62,7 +66,15 @@ function toChatMessage(
     content: message.content,
     createdAt: message.createdAt,
     status: "sent",
-    versions: message.versions,
+    sources: message.sources,
+    versions: message.versions?.map(
+      (version) => ({
+        id: version.id,
+        content: version.content,
+        createdAt: version.createdAt,
+        sources: version.sources,
+      }),
+    ),
     activeVersionIndex:
       message.activeVersionIndex,
     feedback: message.feedback,
@@ -101,7 +113,9 @@ export async function sendRealMessage(
   )
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(
+      await getErrorMessage(response),
+    )
   }
 
   const data =
@@ -110,7 +124,8 @@ export async function sendRealMessage(
   const assistantMessage = [...data.messages]
     .reverse()
     .find(
-      (message) => message.role === "assistant",
+      (message) =>
+        message.role === "assistant",
     )
 
   if (!assistantMessage) {
@@ -119,9 +134,17 @@ export async function sendRealMessage(
     )
   }
 
+  const mappedAssistantMessage =
+    toChatMessage(assistantMessage)
+
   return {
     conversationId: data.conversationId,
-    message: toChatMessage(assistantMessage),
+    message: {
+      ...mappedAssistantMessage,
+      sources:
+        mappedAssistantMessage.sources ??
+        data.sources,
+    },
   }
 }
 
@@ -142,7 +165,9 @@ export async function streamRealMessage(
   )
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(
+      await getErrorMessage(response),
+    )
   }
 
   if (!response.body) {
@@ -155,11 +180,15 @@ export async function streamRealMessage(
   const decoder = new TextDecoder()
 
   let buffer = ""
+
   let resolvedConversationId =
     request.conversationId || ""
 
   while (true) {
-    const { value, done } = await reader.read()
+    const {
+      value,
+      done,
+    } = await reader.read()
 
     if (done) {
       break
@@ -171,7 +200,8 @@ export async function streamRealMessage(
 
     buffer = buffer.replace(/\r\n/g, "\n")
 
-    const eventBlocks = buffer.split("\n\n")
+    const eventBlocks =
+      buffer.split("\n\n")
 
     buffer = eventBlocks.pop() || ""
 
@@ -182,16 +212,19 @@ export async function streamRealMessage(
 
       const lines = eventBlock.split("\n")
 
-      const eventLine = lines.find((line) =>
-        line.startsWith("event:"),
+      const eventLine = lines.find(
+        (line) =>
+          line.startsWith("event:"),
       )
 
       const dataLines = lines
-        .filter((line) =>
-          line.startsWith("data:"),
+        .filter(
+          (line) =>
+            line.startsWith("data:"),
         )
-        .map((line) =>
-          line.slice(5).trim(),
+        .map(
+          (line) =>
+            line.slice(5).trim(),
         )
 
       if (dataLines.length === 0) {
@@ -222,7 +255,9 @@ export async function streamRealMessage(
         eventName === "chunk" &&
         eventData.text
       ) {
-        handlers.onChunk(eventData.text)
+        handlers.onChunk(
+          eventData.text,
+        )
       }
 
       if (eventName === "done") {
@@ -248,7 +283,8 @@ export async function streamRealMessage(
   }
 
   return {
-    conversationId: resolvedConversationId,
+    conversationId:
+      resolvedConversationId,
   }
 }
 
@@ -262,16 +298,20 @@ export async function getRealConversation(
   )
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(
+      await getErrorMessage(response),
+    )
   }
 
   const data =
     (await response.json()) as ApiConversationHistoryResponse
 
   return {
-    conversationId: data.conversationId,
+    conversationId:
+      data.conversationId,
     title: data.title,
-    messages: data.messages.map(toChatMessage),
+    messages:
+      data.messages.map(toChatMessage),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   }

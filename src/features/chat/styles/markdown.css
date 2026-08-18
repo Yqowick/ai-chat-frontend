@@ -202,3 +202,139 @@
   margin: 0.75rem 0;
   border-radius: 0.75rem;
 }
+
+.citation-wrapper {
+  position: relative;
+  display: inline-flex;
+  vertical-align: baseline;
+}
+
+.markdown-content .citation-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.65rem;
+  margin: 0 0.08rem;
+  border: 1px solid
+    rgb(37 99 235 / 30%);
+  border-radius: 9999px;
+  background:
+    rgb(37 99 235 / 10%);
+  padding: 0.05rem 0.32rem;
+  color: #2563eb;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1.35;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background-color 150ms ease,
+    border-color 150ms ease,
+    transform 150ms ease;
+}
+
+.markdown-content
+  .citation-link:hover,
+.markdown-content
+  .citation-link:focus-visible {
+  border-color:
+    rgb(37 99 235 / 60%);
+  background:
+    rgb(37 99 235 / 18%);
+  transform: translateY(-1px);
+  outline: none;
+}
+
+.citation-tooltip {
+  position: absolute;
+  bottom: calc(100% + 0.55rem);
+  left: 50%;
+  z-index: 30;
+  display: flex;
+  width: max-content;
+  max-width: min(
+    18rem,
+    calc(100vw - 2rem)
+  );
+  flex-direction: column;
+  gap: 0.25rem;
+  transform:
+    translateX(-50%)
+    translateY(0.25rem);
+  pointer-events: none;
+  visibility: hidden;
+  opacity: 0;
+  border: 1px solid var(--border);
+  border-radius: 0.65rem;
+  background: var(--popover);
+  padding: 0.65rem 0.75rem;
+  color: var(--popover-foreground);
+  box-shadow:
+    0 10px 30px
+      rgb(0 0 0 / 18%);
+  transition:
+    opacity 150ms ease,
+    transform 150ms ease,
+    visibility 150ms ease;
+}
+
+.citation-tooltip::after {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  width: 0.55rem;
+  height: 0.55rem;
+  transform:
+    translate(-50%, -50%)
+    rotate(45deg);
+  border-right: 1px solid
+    var(--border);
+  border-bottom: 1px solid
+    var(--border);
+  background: var(--popover);
+  content: "";
+}
+
+.citation-wrapper:hover
+  .citation-tooltip,
+.citation-wrapper:focus-within
+  .citation-tooltip {
+  visibility: visible;
+  opacity: 1;
+  transform:
+    translateX(-50%)
+    translateY(0);
+}
+
+.citation-tooltip-title {
+  font-size: 0.75rem;
+  line-height: 1.35;
+}
+
+.citation-tooltip-host {
+  overflow: hidden;
+  color: var(--muted-foreground);
+  font-size: 0.68rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.citation-tooltip-hint {
+  color: #2563eb;
+  font-size: 0.65rem;
+  font-weight: 600;
+}
+
+.dark
+  .markdown-content
+  .citation-link {
+  border-color:
+    rgb(96 165 250 / 35%);
+  background:
+    rgb(96 165 250 / 12%);
+  color: #60a5fa;
+}
+
+.dark .citation-tooltip-hint {
+  color: #60a5fa;
+}

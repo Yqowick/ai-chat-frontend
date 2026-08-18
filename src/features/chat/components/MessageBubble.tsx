@@ -30,12 +30,14 @@ import {
 } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { CitationLink } from "@/features/chat/components/CitationLink"
 import { FeedbackModal } from "@/features/chat/components/FeedbackModal"
 import { ResponseMetadata } from "@/features/chat/components/ResponseMetadata"
 import { submitAssistantFeedback } from "@/features/chat/services/feedbackApi"
 import "@/features/chat/styles/markdown.css"
 import type {
   ChatMessage,
+  ChatSource,
   FeedbackRating,
 } from "@/features/chat/types/chat"
 import { cn } from "@/lib/utils"
@@ -50,21 +52,27 @@ interface MessageBubbleProps {
   conversationId: string | null
   isActionLoading: boolean
   messageActionType: MessageActionType
-  onRegenerate: (messageId: string) => void
+  onRegenerate: (
+    messageId: string,
+  ) => void
   onSwitchVersion: (
     messageId: string,
     versionIndex: number,
   ) => void
 }
 
-function formatMessageTime(createdAt: string) {
+function formatMessageTime(
+  createdAt: string,
+) {
   return new Intl.DateTimeFormat([], {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(createdAt))
 }
 
-function extractText(node: ReactNode): string {
+function extractText(
+  node: ReactNode,
+): string {
   if (
     typeof node === "string" ||
     typeof node === "number"
@@ -73,7 +81,9 @@ function extractText(node: ReactNode): string {
   }
 
   if (Array.isArray(node)) {
-    return node.map(extractText).join("")
+    return node
+      .map(extractText)
+      .join("")
   }
 
   if (
@@ -81,7 +91,9 @@ function extractText(node: ReactNode): string {
       children?: ReactNode
     }>(node)
   ) {
-    return extractText(node.props.children)
+    return extractText(
+      node.props.children,
+    )
   }
 
   return ""
@@ -90,13 +102,16 @@ function extractText(node: ReactNode): string {
 function MarkdownCodeBlock({
   children,
 }: ComponentPropsWithoutRef<"pre">) {
-  const [isCopied, setIsCopied] =
-    useState(false)
+  const [
+    isCopied,
+    setIsCopied,
+  ] = useState(false)
 
-  const codeText = extractText(children).replace(
-    /\n$/,
-    "",
-  )
+  const codeText =
+    extractText(children).replace(
+      /\n$/,
+      "",
+    )
 
   async function copyCode() {
     try {
@@ -143,8 +158,10 @@ function MarkdownCodeBlock({
 
 function AssistantMarkdown({
   content,
+  sources = [],
 }: {
   content: string
+  sources?: ChatSource[]
 }) {
   return (
     <div className="markdown-content">
@@ -160,15 +177,66 @@ function AssistantMarkdown({
         ]}
         components={{
           pre: MarkdownCodeBlock,
-          a: ({ href, children }) => (
-            <a
-              href={href}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {children}
-            </a>
-          ),
+
+          a: ({
+            href,
+            title,
+            children,
+          }) => {
+            const visibleText =
+              extractText(children).trim()
+
+            const citationMatch =
+              visibleText.match(
+                /^\[(\d+)\]$/,
+              )
+
+            if (
+              href &&
+              citationMatch
+            ) {
+              const citationNumber =
+                Number(
+                  citationMatch[1],
+                )
+
+              const source =
+                sources.find(
+                  (
+                    candidateSource,
+                  ) =>
+                    candidateSource
+                      .citationNumber ===
+                      citationNumber ||
+                    candidateSource.url ===
+                      href,
+                )
+
+              return (
+                <CitationLink
+                  citationNumber={
+                    citationNumber
+                  }
+                  href={href}
+                  title={
+                    source?.title ||
+                    title ||
+                    `Source ${citationNumber}`
+                  }
+                />
+              )
+            }
+
+            return (
+              <a
+                href={href}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {children}
+              </a>
+            )
+          },
         }}
       >
         {content}
@@ -188,28 +256,40 @@ export function MessageBubble({
   const isUserMessage =
     message.role === "user"
 
-  const [feedback, setFeedback] = useState(
+  const [
+    feedback,
+    setFeedback,
+  ] = useState(
     message.feedback,
   )
 
   const [
     pendingFeedbackRating,
     setPendingFeedbackRating,
-  ] = useState<FeedbackRating | null>(null)
+  ] =
+    useState<FeedbackRating | null>(
+      null,
+    )
 
   const [
     isFeedbackSubmitting,
     setIsFeedbackSubmitting,
   ] = useState(false)
 
-  const [feedbackError, setFeedbackError] =
+  const [
+    feedbackError,
+    setFeedbackError,
+  ] =
     useState<string | null>(null)
 
   useEffect(() => {
-    setFeedback(message.feedback)
+    setFeedback(
+      message.feedback,
+    )
   }, [message.feedback])
 
-  const versions = message.versions ?? []
+  const versions =
+    message.versions ?? []
 
   const activeVersionIndex =
     message.activeVersionIndex ?? 0
@@ -242,7 +322,10 @@ export function MessageBubble({
       return
     }
 
-    setPendingFeedbackRating(rating)
+    setPendingFeedbackRating(
+      rating,
+    )
+
     setFeedbackError(null)
   }
 
@@ -251,7 +334,10 @@ export function MessageBubble({
       return
     }
 
-    setPendingFeedbackRating(null)
+    setPendingFeedbackRating(
+      null,
+    )
+
     setFeedbackError(null)
   }
 
@@ -277,8 +363,13 @@ export function MessageBubble({
           comment,
         )
 
-      setFeedback(response.message.feedback)
-      setPendingFeedbackRating(null)
+      setFeedback(
+        response.message.feedback,
+      )
+
+      setPendingFeedbackRating(
+        null,
+      )
     } catch (caughtError) {
       setFeedbackError(
         caughtError instanceof Error
@@ -286,7 +377,9 @@ export function MessageBubble({
           : "Failed to save your feedback.",
       )
     } finally {
-      setIsFeedbackSubmitting(false)
+      setIsFeedbackSubmitting(
+        false,
+      )
     }
   }
 
@@ -295,7 +388,8 @@ export function MessageBubble({
       <article
         className={cn(
           "flex w-full items-start gap-3",
-          isUserMessage && "flex-row-reverse",
+          isUserMessage &&
+            "flex-row-reverse",
         )}
       >
         <Avatar className="size-9 shrink-0">
@@ -336,12 +430,18 @@ export function MessageBubble({
               </p>
             ) : (
               <AssistantMarkdown
-                content={message.content}
+                content={
+                  message.content
+                }
+                sources={
+                  message.sources
+                }
               />
             )}
 
             {message.sources &&
-              message.sources.length > 0 && (
+              message.sources.length >
+                0 && (
                 <div className="mt-3">
                   <Separator className="mb-3" />
 
@@ -351,9 +451,9 @@ export function MessageBubble({
 
                   <ul className="space-y-1">
                     {message.sources.map(
-                      (source, index) => (
+                      (source) => (
                         <li
-                          key={`${source.title}-${index}`}
+                          key={`${source.citationNumber}-${source.title}`}
                           className="text-xs opacity-80"
                           title={
                             source.url ??
@@ -362,15 +462,33 @@ export function MessageBubble({
                         >
                           {source.url ? (
                             <a
-                              href={source.url}
+                              href={
+                                source.url
+                              }
                               target="_blank"
                               rel="noreferrer"
                               className="underline underline-offset-2"
                             >
-                              {source.title}
+                              [
+                              {
+                                source.citationNumber
+                              }
+                              ]{" "}
+                              {
+                                source.title
+                              }
                             </a>
                           ) : (
-                            source.title
+                            <>
+                              [
+                              {
+                                source.citationNumber
+                              }
+                              ]{" "}
+                              {
+                                source.title
+                              }
+                            </>
                           )}
                         </li>
                       ),
@@ -392,7 +510,9 @@ export function MessageBubble({
                   isFeedbackSubmitting
                 }
                 onClick={() =>
-                  onRegenerate(message.id)
+                  onRegenerate(
+                    message.id,
+                  )
                 }
                 aria-label="Regenerate response"
                 title="Regenerate response"
@@ -425,7 +545,8 @@ export function MessageBubble({
                     onClick={() =>
                       onSwitchVersion(
                         message.id,
-                        activeVersionIndex - 1,
+                        activeVersionIndex -
+                          1,
                       )
                     }
                     aria-label="Previous response version"
@@ -435,8 +556,9 @@ export function MessageBubble({
                   </Button>
 
                   <span className="min-w-10 text-center text-[11px] text-muted-foreground">
-                    {activeVersionIndex + 1} /{" "}
-                    {versions.length}
+                    {activeVersionIndex +
+                      1}{" "}
+                    / {versions.length}
                   </span>
 
                   <Button
@@ -450,7 +572,8 @@ export function MessageBubble({
                     onClick={() =>
                       onSwitchVersion(
                         message.id,
-                        activeVersionIndex + 1,
+                        activeVersionIndex +
+                          1,
                       )
                     }
                     aria-label="Next response version"
@@ -474,7 +597,8 @@ export function MessageBubble({
                   size="icon"
                   className={cn(
                     "size-7 text-muted-foreground",
-                    feedback?.rating === "up" &&
+                    feedback?.rating ===
+                      "up" &&
                       "bg-emerald-500/10 text-emerald-600",
                   )}
                   disabled={
@@ -482,7 +606,9 @@ export function MessageBubble({
                     isFeedbackSubmitting
                   }
                   onClick={() =>
-                    openFeedbackModal("up")
+                    openFeedbackModal(
+                      "up",
+                    )
                   }
                   aria-label="Rate response positively"
                   title="Good response"
@@ -511,7 +637,9 @@ export function MessageBubble({
                     isFeedbackSubmitting
                   }
                   onClick={() =>
-                    openFeedbackModal("down")
+                    openFeedbackModal(
+                      "down",
+                    )
                   }
                   aria-label="Rate response negatively"
                   title="Response needs improvement"
@@ -546,20 +674,27 @@ export function MessageBubble({
           <div
             className={cn(
               "mt-1.5 flex items-center gap-1.5 px-1 text-xs text-muted-foreground",
-              isUserMessage && "justify-end",
+              isUserMessage &&
+                "justify-end",
             )}
           >
-            <time dateTime={message.createdAt}>
+            <time
+              dateTime={
+                message.createdAt
+              }
+            >
               {formatMessageTime(
                 message.createdAt,
               )}
             </time>
 
-            {message.status === "sending" && (
+            {message.status ===
+              "sending" && (
               <LoaderCircle className="size-3 animate-spin" />
             )}
 
-            {message.status === "error" && (
+            {message.status ===
+              "error" && (
               <span className="flex items-center gap-1 text-destructive">
                 <AlertCircle className="size-3" />
                 Failed
@@ -571,18 +706,27 @@ export function MessageBubble({
 
       <FeedbackModal
         isOpen={
-          pendingFeedbackRating !== null
+          pendingFeedbackRating !==
+          null
         }
-        rating={pendingFeedbackRating}
+        rating={
+          pendingFeedbackRating
+        }
         initialComment={
           feedback?.rating ===
           pendingFeedbackRating
             ? feedback.comment
             : ""
         }
-        isSubmitting={isFeedbackSubmitting}
-        onClose={closeFeedbackModal}
-        onSubmit={submitFeedback}
+        isSubmitting={
+          isFeedbackSubmitting
+        }
+        onClose={
+          closeFeedbackModal
+        }
+        onSubmit={
+          submitFeedback
+        }
       />
     </>
   )
