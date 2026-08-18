@@ -34,6 +34,25 @@ export interface ConversationHistoryResponse {
   updatedAt: string
 }
 
+export interface ConversationLastMessage {
+  role: ChatRole
+  content: string
+  createdAt: string
+}
+
+export interface ConversationSummary {
+  conversationId: string
+  title: string
+  messageCount: number
+  lastMessage: ConversationLastMessage | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConversationListResponse {
+  conversations: ConversationSummary[]
+}
+
 export interface StreamMessageHandlers {
   onConversationId: (conversationId: string) => void
   onChunk: (text: string) => void

@@ -1,14 +1,23 @@
-import { useCallback, useEffect, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react"
 
 import { apiConfig } from "@/config/api"
 import { mockMessages } from "@/features/chat/data/mockMessages"
+import { loadConversationThreads } from "@/features/chat/services/conversationApi"
 import {
   loadConversation,
   streamMessage as streamChatMessage,
 } from "@/features/chat/services/chatApi"
-import type { ChatMessage } from "@/features/chat/types/chat"
+import type {
+  ChatMessage,
+  ConversationSummary,
+} from "@/features/chat/types/chat"
 
-const conversationStorageKey = "ai-chat-conversation-id"
+const conversationStorageKey =
+  "ai-chat-conversation-id"
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
@@ -23,10 +32,42 @@ export function useChat() {
       : localStorage.getItem(conversationStorageKey),
   )
 
+  const [conversations, setConversations] = useState<
+    ConversationSummary[]
+  >([])
+
   const [isResponding, setIsResponding] = useState(false)
+
   const [isLoadingHistory, setIsLoadingHistory] =
     useState(false)
+
+  const [
+    isLoadingConversations,
+    setIsLoadingConversations,
+  ] = useState(false)
+
   const [error, setError] = useState<string | null>(null)
+
+  const refreshConversations = useCallback(async () => {
+    setIsLoadingConversations(true)
+
+    try {
+      const response = await loadConversationThreads()
+      setConversations(response.conversations)
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load conversations.",
+      )
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshConversations()
+  }, [refreshConversations])
 
   useEffect(() => {
     if (apiConfig.useMockApi || !conversationId) {
@@ -69,6 +110,44 @@ export function useChat() {
     }
   }, [conversationId])
 
+  const selectConversation = useCallback(
+    (selectedConversationId: string) => {
+      if (
+        isResponding ||
+        isLoadingHistory ||
+        selectedConversationId === conversationId
+      ) {
+        return
+      }
+
+      localStorage.setItem(
+        conversationStorageKey,
+        selectedConversationId,
+      )
+
+      setMessages([])
+      setConversationId(selectedConversationId)
+      setError(null)
+    },
+    [
+      conversationId,
+      isLoadingHistory,
+      isResponding,
+    ],
+  )
+
+  const startNewConversation = useCallback(() => {
+    if (isResponding || isLoadingHistory) {
+      return
+    }
+
+    localStorage.removeItem(conversationStorageKey)
+
+    setConversationId(null)
+    setMessages([])
+    setError(null)
+  }, [isLoadingHistory, isResponding])
+
   const sendMessage = useCallback(
     async (content: string) => {
       const trimmedContent = content.trim()
@@ -109,7 +188,9 @@ export function useChat() {
             conversationId: conversationId ?? undefined,
           },
           {
-            onConversationId: (receivedConversationId) => {
+            onConversationId: (
+              receivedConversationId,
+            ) => {
               streamConversationId =
                 receivedConversationId
             },
@@ -176,6 +257,8 @@ export function useChat() {
               : message,
           ),
         )
+
+        void refreshConversations()
       } catch (caughtError) {
         setMessages((currentMessages) =>
           currentMessages.map((message) =>
@@ -202,23 +285,22 @@ export function useChat() {
       conversationId,
       isLoadingHistory,
       isResponding,
+      refreshConversations,
     ],
   )
-
-  const clearChat = useCallback(() => {
-    localStorage.removeItem(conversationStorageKey)
-    setConversationId(null)
-    setMessages([])
-    setError(null)
-  }, [])
 
   return {
     messages,
     conversationId,
+    conversations,
     isResponding,
     isLoadingHistory,
+    isLoadingConversations,
     error,
     sendMessage,
-    clearChat,
+    selectConversation,
+    startNewConversation,
+    clearChat: startNewConversation,
+    refreshConversations,
   }
 }
