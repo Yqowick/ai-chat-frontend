@@ -5,6 +5,8 @@ import type {
   ConversationHistoryResponse,
   SendMessageRequest,
   SendMessageResponse,
+  StreamMessageHandlers,
+  StreamMessageResult,
 } from "@/features/chat/types/chat"
 
 interface ApiMessage {
@@ -28,6 +30,12 @@ interface ApiConversationHistoryResponse {
   updatedAt: string
 }
 
+interface ApiStreamEventData {
+  conversationId?: string
+  text?: string
+  message?: string
+}
+
 function toChatMessage(message: ApiMessage): ChatMessage {
   return {
     id: message.id,
@@ -38,7 +46,9 @@ function toChatMessage(message: ApiMessage): ChatMessage {
   }
 }
 
-async function getErrorMessage(response: Response): Promise<string> {
+async function getErrorMessage(
+  response: Response,
+): Promise<string> {
   try {
     const data = (await response.json()) as {
       error?: string
@@ -65,14 +75,17 @@ export async function sendRealMessage(
     throw new Error(await getErrorMessage(response))
   }
 
-  const data = (await response.json()) as ApiSendMessageResponse
+  const data =
+    (await response.json()) as ApiSendMessageResponse
 
   const assistantMessage = [...data.messages]
     .reverse()
     .find((message) => message.role === "assistant")
 
   if (!assistantMessage) {
-    throw new Error("The server did not return an assistant message.")
+    throw new Error(
+      "The server did not return an assistant message.",
+    )
   }
 
   return {
@@ -81,11 +94,133 @@ export async function sendRealMessage(
   }
 }
 
+export async function streamRealMessage(
+  request: SendMessageRequest,
+  handlers: StreamMessageHandlers,
+): Promise<StreamMessageResult> {
+  const response = await fetch(
+    `${apiConfig.baseUrl}/chat/stream`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Accept: "text/event-stream",
+      },
+      body: JSON.stringify(request),
+    },
+  )
+
+  if (!response.ok) {
+    throw new Error(await getErrorMessage(response))
+  }
+
+  if (!response.body) {
+    throw new Error(
+      "Streaming is not supported by this browser.",
+    )
+  }
+
+  const reader = response.body.getReader()
+  const decoder = new TextDecoder()
+
+  let buffer = ""
+  let resolvedConversationId =
+    request.conversationId || ""
+
+  while (true) {
+    const { value, done } = await reader.read()
+
+    if (done) {
+      break
+    }
+
+    buffer += decoder.decode(value, {
+      stream: true,
+    })
+
+    buffer = buffer.replace(/\r\n/g, "\n")
+
+    const eventBlocks = buffer.split("\n\n")
+
+    buffer = eventBlocks.pop() || ""
+
+    for (const eventBlock of eventBlocks) {
+      if (!eventBlock.trim()) {
+        continue
+      }
+
+      const lines = eventBlock.split("\n")
+
+      const eventLine = lines.find((line) =>
+        line.startsWith("event:"),
+      )
+
+      const dataLines = lines
+        .filter((line) => line.startsWith("data:"))
+        .map((line) => line.slice(5).trim())
+
+      if (dataLines.length === 0) {
+        continue
+      }
+
+      const eventName = eventLine
+        ? eventLine.slice(6).trim()
+        : "message"
+
+      const eventData = JSON.parse(
+        dataLines.join("\n"),
+      ) as ApiStreamEventData
+
+      if (
+        eventName === "conversation" &&
+        eventData.conversationId
+      ) {
+        resolvedConversationId =
+          eventData.conversationId
+
+        handlers.onConversationId(
+          eventData.conversationId,
+        )
+      }
+
+      if (eventName === "chunk" && eventData.text) {
+        handlers.onChunk(eventData.text)
+      }
+
+      if (eventName === "done") {
+        if (eventData.conversationId) {
+          resolvedConversationId =
+            eventData.conversationId
+        }
+      }
+
+      if (eventName === "error") {
+        throw new Error(
+          eventData.message ||
+            "The response stream failed.",
+        )
+      }
+    }
+  }
+
+  if (!resolvedConversationId) {
+    throw new Error(
+      "The server did not return a conversation ID.",
+    )
+  }
+
+  return {
+    conversationId: resolvedConversationId,
+  }
+}
+
 export async function getRealConversation(
   conversationId: string,
 ): Promise<ConversationHistoryResponse> {
   const response = await fetch(
-    `${apiConfig.baseUrl}/conversations/${encodeURIComponent(conversationId)}`,
+    `${apiConfig.baseUrl}/conversations/${encodeURIComponent(
+      conversationId,
+    )}`,
   )
 
   if (!response.ok) {

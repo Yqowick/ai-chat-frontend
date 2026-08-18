@@ -33,3 +33,12 @@ export interface ConversationHistoryResponse {
   createdAt: string
   updatedAt: string
 }
+
+export interface StreamMessageHandlers {
+  onConversationId: (conversationId: string) => void
+  onChunk: (text: string) => void
+}
+
+export interface StreamMessageResult {
+  conversationId: string
+}
