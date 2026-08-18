@@ -31,6 +31,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { FeedbackModal } from "@/features/chat/components/FeedbackModal"
+import { ResponseMetadata } from "@/features/chat/components/ResponseMetadata"
 import { submitAssistantFeedback } from "@/features/chat/services/feedbackApi"
 import "@/features/chat/styles/markdown.css"
 import type {
@@ -525,6 +526,15 @@ export function MessageBubble({
                 </Button>
               </div>
             </div>
+          )}
+
+          {canShowActions && (
+            <ResponseMetadata
+              message={{
+                ...message,
+                feedback,
+              }}
+            />
           )}
 
           {feedbackError && (
