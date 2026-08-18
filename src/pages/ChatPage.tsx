@@ -18,8 +18,13 @@ export function ChatPage() {
     isResponding,
     isLoadingHistory,
     isLoadingConversations,
+    isPerformingMessageAction,
+    activeMessageActionId,
+    messageActionType,
     error,
     sendMessage,
+    regenerateMessage,
+    switchMessageVersion,
     selectConversation,
     startNewConversation,
   } = useChat()
@@ -28,7 +33,14 @@ export function ChatPage() {
     messages.at(-1)?.role === "assistant" &&
     messages.at(-1)?.status === "sending"
 
-  const isBusy = isResponding || isLoadingHistory
+  const isInterfaceBusy =
+    isResponding ||
+    isLoadingHistory ||
+    isPerformingMessageAction
+
+  const shouldShowThinkingIndicator =
+    (isResponding || isLoadingHistory) &&
+    !isAssistantStreaming
 
   function handleNewConversation() {
     startNewConversation()
@@ -49,7 +61,7 @@ export function ChatPage() {
           conversations={conversations}
           activeConversationId={conversationId}
           isLoading={isLoadingConversations}
-          isBusy={isBusy}
+          isBusy={isInterfaceBusy}
           onNewConversation={handleNewConversation}
           onSelectConversation={
             handleSelectConversation
@@ -71,7 +83,7 @@ export function ChatPage() {
               conversations={conversations}
               activeConversationId={conversationId}
               isLoading={isLoadingConversations}
-              isBusy={isBusy}
+              isBusy={isInterfaceBusy}
               onNewConversation={
                 handleNewConversation
               }
@@ -86,7 +98,7 @@ export function ChatPage() {
 
       <div className="flex min-w-0 flex-1 flex-col">
         <ChatHeader
-          isBusy={isBusy}
+          isBusy={isInterfaceBusy}
           onNewConversation={handleNewConversation}
           onToggleSidebar={() =>
             setIsSidebarOpen(true)
@@ -96,8 +108,14 @@ export function ChatPage() {
         <main className="min-h-0 flex-1">
           <MessageList
             messages={messages}
-            isResponding={
-              isBusy && !isAssistantStreaming
+            isResponding={shouldShowThinkingIndicator}
+            activeMessageActionId={
+              activeMessageActionId
+            }
+            messageActionType={messageActionType}
+            onRegenerateMessage={regenerateMessage}
+            onSwitchMessageVersion={
+              switchMessageVersion
             }
           />
         </main>
@@ -115,7 +133,7 @@ export function ChatPage() {
         )}
 
         <ChatInput
-          isResponding={isBusy}
+          isResponding={isInterfaceBusy}
           onSendMessage={sendMessage}
         />
       </div>

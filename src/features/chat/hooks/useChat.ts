@@ -11,6 +11,10 @@ import {
   loadConversation,
   streamMessage as streamChatMessage,
 } from "@/features/chat/services/chatApi"
+import {
+  regenerateAssistantResponse,
+  switchAssistantResponseVersion,
+} from "@/features/chat/services/responseVersionApi"
 import type {
   ChatMessage,
   ConversationSummary,
@@ -18,6 +22,11 @@ import type {
 
 const conversationStorageKey =
   "ai-chat-conversation-id"
+
+type MessageActionType =
+  | "regenerate"
+  | "switch-version"
+  | null
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
@@ -46,7 +55,18 @@ export function useChat() {
     setIsLoadingConversations,
   ] = useState(false)
 
+  const [
+    activeMessageActionId,
+    setActiveMessageActionId,
+  ] = useState<string | null>(null)
+
+  const [messageActionType, setMessageActionType] =
+    useState<MessageActionType>(null)
+
   const [error, setError] = useState<string | null>(null)
+
+  const isPerformingMessageAction =
+    activeMessageActionId !== null
 
   const refreshConversations = useCallback(async () => {
     setIsLoadingConversations(true)
@@ -115,6 +135,7 @@ export function useChat() {
       if (
         isResponding ||
         isLoadingHistory ||
+        isPerformingMessageAction ||
         selectedConversationId === conversationId
       ) {
         return
@@ -132,12 +153,17 @@ export function useChat() {
     [
       conversationId,
       isLoadingHistory,
+      isPerformingMessageAction,
       isResponding,
     ],
   )
 
   const startNewConversation = useCallback(() => {
-    if (isResponding || isLoadingHistory) {
+    if (
+      isResponding ||
+      isLoadingHistory ||
+      isPerformingMessageAction
+    ) {
       return
     }
 
@@ -146,7 +172,11 @@ export function useChat() {
     setConversationId(null)
     setMessages([])
     setError(null)
-  }, [isLoadingHistory, isResponding])
+  }, [
+    isLoadingHistory,
+    isPerformingMessageAction,
+    isResponding,
+  ])
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -155,7 +185,8 @@ export function useChat() {
       if (
         !trimmedContent ||
         isResponding ||
-        isLoadingHistory
+        isLoadingHistory ||
+        isPerformingMessageAction
       ) {
         return
       }
@@ -235,17 +266,6 @@ export function useChat() {
           result.conversationId ||
           streamConversationId
 
-        if (finalConversationId) {
-          localStorage.setItem(
-            conversationStorageKey,
-            finalConversationId,
-          )
-
-          if (finalConversationId !== conversationId) {
-            setConversationId(finalConversationId)
-          }
-        }
-
         setMessages((currentMessages) =>
           currentMessages.map((message) =>
             message.id === userMessageId ||
@@ -257,6 +277,23 @@ export function useChat() {
               : message,
           ),
         )
+
+        if (finalConversationId) {
+          localStorage.setItem(
+            conversationStorageKey,
+            finalConversationId,
+          )
+
+          if (finalConversationId !== conversationId) {
+            setConversationId(finalConversationId)
+          }
+
+          const history = await loadConversation(
+            finalConversationId,
+          )
+
+          setMessages(history.messages)
+        }
 
         void refreshConversations()
       } catch (caughtError) {
@@ -284,6 +321,113 @@ export function useChat() {
     [
       conversationId,
       isLoadingHistory,
+      isPerformingMessageAction,
+      isResponding,
+      refreshConversations,
+    ],
+  )
+
+  const regenerateMessage = useCallback(
+    async (messageId: string) => {
+      if (
+        !conversationId ||
+        isResponding ||
+        isLoadingHistory ||
+        isPerformingMessageAction
+      ) {
+        return
+      }
+
+      setActiveMessageActionId(messageId)
+      setMessageActionType("regenerate")
+      setError(null)
+
+      try {
+        const response =
+          await regenerateAssistantResponse(
+            conversationId,
+            messageId,
+          )
+
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === messageId
+              ? response.message
+              : message,
+          ),
+        )
+
+        void refreshConversations()
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to regenerate the response.",
+        )
+      } finally {
+        setActiveMessageActionId(null)
+        setMessageActionType(null)
+      }
+    },
+    [
+      conversationId,
+      isLoadingHistory,
+      isPerformingMessageAction,
+      isResponding,
+      refreshConversations,
+    ],
+  )
+
+  const switchMessageVersion = useCallback(
+    async (
+      messageId: string,
+      versionIndex: number,
+    ) => {
+      if (
+        !conversationId ||
+        isResponding ||
+        isLoadingHistory ||
+        isPerformingMessageAction
+      ) {
+        return
+      }
+
+      setActiveMessageActionId(messageId)
+      setMessageActionType("switch-version")
+      setError(null)
+
+      try {
+        const response =
+          await switchAssistantResponseVersion(
+            conversationId,
+            messageId,
+            versionIndex,
+          )
+
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === messageId
+              ? response.message
+              : message,
+          ),
+        )
+
+        void refreshConversations()
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to switch the response version.",
+        )
+      } finally {
+        setActiveMessageActionId(null)
+        setMessageActionType(null)
+      }
+    },
+    [
+      conversationId,
+      isLoadingHistory,
+      isPerformingMessageAction,
       isResponding,
       refreshConversations,
     ],
@@ -296,8 +440,13 @@ export function useChat() {
     isResponding,
     isLoadingHistory,
     isLoadingConversations,
+    isPerformingMessageAction,
+    activeMessageActionId,
+    messageActionType,
     error,
     sendMessage,
+    regenerateMessage,
+    switchMessageVersion,
     selectConversation,
     startNewConversation,
     clearChat: startNewConversation,

@@ -16,14 +16,30 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { MessageBubble } from "@/features/chat/components/MessageBubble"
 import type { ChatMessage } from "@/features/chat/types/chat"
 
+type MessageActionType =
+  | "regenerate"
+  | "switch-version"
+  | null
+
 interface MessageListProps {
   messages: ChatMessage[]
   isResponding: boolean
+  activeMessageActionId: string | null
+  messageActionType: MessageActionType
+  onRegenerateMessage: (messageId: string) => void
+  onSwitchMessageVersion: (
+    messageId: string,
+    versionIndex: number,
+  ) => void
 }
 
 export function MessageList({
   messages,
   isResponding,
+  activeMessageActionId,
+  messageActionType,
+  onRegenerateMessage,
+  onSwitchMessageVersion,
 }: MessageListProps) {
   const bottomReference = useRef<HTMLDivElement>(null)
 
@@ -32,7 +48,11 @@ export function MessageList({
       behavior: "smooth",
       block: "end",
     })
-  }, [messages, isResponding])
+  }, [
+    messages,
+    isResponding,
+    activeMessageActionId,
+  ])
 
   return (
     <ScrollArea className="h-full">
@@ -48,8 +68,9 @@ export function MessageList({
             </h2>
 
             <p className="mt-2 max-w-sm text-sm leading-6 text-muted-foreground">
-              Ask a question about your documents and the AI assistant
-              will provide an answer with relevant sources.
+              Ask a question about your documents and the AI
+              assistant will provide an answer with relevant
+              sources.
             </p>
           </div>
         ) : (
@@ -58,6 +79,14 @@ export function MessageList({
               <MessageBubble
                 key={message.id}
                 message={message}
+                isActionLoading={
+                  activeMessageActionId === message.id
+                }
+                messageActionType={messageActionType}
+                onRegenerate={onRegenerateMessage}
+                onSwitchVersion={
+                  onSwitchMessageVersion
+                }
               />
             ))}
 

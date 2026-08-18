@@ -10,8 +10,11 @@ import {
   AlertCircle,
   Bot,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   LoaderCircle,
+  RefreshCw,
   User,
 } from "lucide-react"
 import ReactMarkdown from "react-markdown"
@@ -22,13 +25,26 @@ import {
   Avatar,
   AvatarFallback,
 } from "@/components/ui/avatar"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import type { ChatMessage } from "@/features/chat/types/chat"
 import "@/features/chat/styles/markdown.css"
+import type { ChatMessage } from "@/features/chat/types/chat"
 import { cn } from "@/lib/utils"
+
+type MessageActionType =
+  | "regenerate"
+  | "switch-version"
+  | null
 
 interface MessageBubbleProps {
   message: ChatMessage
+  isActionLoading: boolean
+  messageActionType: MessageActionType
+  onRegenerate: (messageId: string) => void
+  onSwitchVersion: (
+    messageId: string,
+    versionIndex: number,
+  ) => void
 }
 
 function formatMessageTime(createdAt: string) {
@@ -117,7 +133,14 @@ function AssistantMarkdown({
     <div className="markdown-content">
       <ReactMarkdown
         remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeHighlight]}
+        rehypePlugins={[
+          [
+            rehypeHighlight,
+            {
+              detect: true,
+            },
+          ],
+        ]}
         components={{
           pre: MarkdownCodeBlock,
           a: ({ href, children }) => (
@@ -139,8 +162,32 @@ function AssistantMarkdown({
 
 export function MessageBubble({
   message,
+  isActionLoading,
+  messageActionType,
+  onRegenerate,
+  onSwitchVersion,
 }: MessageBubbleProps) {
   const isUserMessage = message.role === "user"
+
+  const versions = message.versions ?? []
+
+  const activeVersionIndex =
+    message.activeVersionIndex ?? 0
+
+  const hasMultipleVersions = versions.length > 1
+
+  const canShowActions =
+    !isUserMessage && message.status === "sent"
+
+  const canSelectPreviousVersion =
+    hasMultipleVersions &&
+    activeVersionIndex > 0 &&
+    !isActionLoading
+
+  const canSelectNextVersion =
+    hasMultipleVersions &&
+    activeVersionIndex < versions.length - 1 &&
+    !isActionLoading
 
   return (
     <article
@@ -222,6 +269,84 @@ export function MessageBubble({
             </div>
           )}
         </div>
+
+        {canShowActions && (
+          <div className="mt-1.5 flex flex-wrap items-center gap-1">
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="h-7 gap-1.5 px-2 text-xs text-muted-foreground"
+              disabled={isActionLoading}
+              onClick={() => onRegenerate(message.id)}
+              aria-label="Regenerate response"
+              title="Regenerate response"
+            >
+              {isActionLoading &&
+              messageActionType === "regenerate" ? (
+                <LoaderCircle className="size-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="size-3.5" />
+              )}
+
+              {isActionLoading &&
+              messageActionType === "regenerate"
+                ? "Regenerating..."
+                : "Regenerate"}
+            </Button>
+
+            {hasMultipleVersions && (
+              <div className="ml-1 flex items-center gap-0.5 rounded-md border bg-background p-0.5">
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  disabled={!canSelectPreviousVersion}
+                  onClick={() =>
+                    onSwitchVersion(
+                      message.id,
+                      activeVersionIndex - 1,
+                    )
+                  }
+                  aria-label="Previous response version"
+                  title="Previous response version"
+                >
+                  <ChevronLeft className="size-3.5" />
+                </Button>
+
+                <span className="min-w-10 text-center text-[11px] text-muted-foreground">
+                  {activeVersionIndex + 1} /{" "}
+                  {versions.length}
+                </span>
+
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="icon"
+                  className="size-6"
+                  disabled={!canSelectNextVersion}
+                  onClick={() =>
+                    onSwitchVersion(
+                      message.id,
+                      activeVersionIndex + 1,
+                    )
+                  }
+                  aria-label="Next response version"
+                  title="Next response version"
+                >
+                  {isActionLoading &&
+                  messageActionType ===
+                    "switch-version" ? (
+                    <LoaderCircle className="size-3.5 animate-spin" />
+                  ) : (
+                    <ChevronRight className="size-3.5" />
+                  )}
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
 
         <div
           className={cn(

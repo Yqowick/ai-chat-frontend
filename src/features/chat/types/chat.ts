@@ -7,6 +7,12 @@ export interface ChatSource {
   url?: string
 }
 
+export interface ChatMessageVersion {
+  id: string
+  content: string
+  createdAt: string
+}
+
 export interface ChatMessage {
   id: string
   role: ChatRole
@@ -14,6 +20,8 @@ export interface ChatMessage {
   createdAt: string
   status: MessageStatus
   sources?: ChatSource[]
+  versions?: ChatMessageVersion[]
+  activeVersionIndex?: number
 }
 
 export interface SendMessageRequest {
@@ -51,6 +59,11 @@ export interface ConversationSummary {
 
 export interface ConversationListResponse {
   conversations: ConversationSummary[]
+}
+
+export interface MessageActionResponse {
+  conversationId: string
+  message: ChatMessage
 }
 
 export interface StreamMessageHandlers {

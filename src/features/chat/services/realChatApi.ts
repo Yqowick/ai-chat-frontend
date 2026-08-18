@@ -1,6 +1,7 @@
 import { apiConfig } from "@/config/api"
 import type {
   ChatMessage,
+  ChatMessageVersion,
   ChatRole,
   ConversationHistoryResponse,
   SendMessageRequest,
@@ -9,11 +10,19 @@ import type {
   StreamMessageResult,
 } from "@/features/chat/types/chat"
 
+interface ApiMessageVersion {
+  id: string
+  content: string
+  createdAt: string
+}
+
 interface ApiMessage {
   id: string
   role: ChatRole
   content: string
   createdAt: string
+  versions?: ApiMessageVersion[]
+  activeVersionIndex?: number
 }
 
 interface ApiSendMessageResponse {
@@ -33,16 +42,28 @@ interface ApiConversationHistoryResponse {
 interface ApiStreamEventData {
   conversationId?: string
   text?: string
-  message?: string
+  message?: string | ApiMessage
 }
 
 function toChatMessage(message: ApiMessage): ChatMessage {
+  const versions: ChatMessageVersion[] | undefined =
+    message.versions?.map((version) => ({
+      id: version.id,
+      content: version.content,
+      createdAt: version.createdAt,
+    }))
+
   return {
     id: message.id,
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
     status: "sent",
+    versions,
+    activeVersionIndex:
+      message.role === "assistant"
+        ? message.activeVersionIndex ?? 0
+        : undefined,
   }
 }
 
@@ -54,7 +75,10 @@ async function getErrorMessage(
       error?: string
     }
 
-    return data.error || "The server returned an unexpected error."
+    return (
+      data.error ||
+      "The server returned an unexpected error."
+    )
   } catch {
     return "The server returned an unexpected error."
   }
@@ -63,13 +87,16 @@ async function getErrorMessage(
 export async function sendRealMessage(
   request: SendMessageRequest,
 ): Promise<SendMessageResponse> {
-  const response = await fetch(`${apiConfig.baseUrl}/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `${apiConfig.baseUrl}/chat`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
     },
-    body: JSON.stringify(request),
-  })
+  )
 
   if (!response.ok) {
     throw new Error(await getErrorMessage(response))
@@ -183,22 +210,28 @@ export async function streamRealMessage(
         )
       }
 
-      if (eventName === "chunk" && eventData.text) {
+      if (
+        eventName === "chunk" &&
+        eventData.text
+      ) {
         handlers.onChunk(eventData.text)
       }
 
-      if (eventName === "done") {
-        if (eventData.conversationId) {
-          resolvedConversationId =
-            eventData.conversationId
-        }
+      if (
+        eventName === "done" &&
+        eventData.conversationId
+      ) {
+        resolvedConversationId =
+          eventData.conversationId
       }
 
       if (eventName === "error") {
-        throw new Error(
-          eventData.message ||
-            "The response stream failed.",
-        )
+        const errorMessage =
+          typeof eventData.message === "string"
+            ? eventData.message
+            : "The response stream failed."
+
+        throw new Error(errorMessage)
       }
     }
   }
