@@ -1,14 +1,32 @@
-import { useCallback, useEffect, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useState,
+} from "react"
 
 import { apiConfig } from "@/config/api"
 import { mockMessages } from "@/features/chat/data/mockMessages"
+import { loadConversationThreads } from "@/features/chat/services/conversationApi"
 import {
   loadConversation,
   streamMessage as streamChatMessage,
 } from "@/features/chat/services/chatApi"
-import type { ChatMessage } from "@/features/chat/types/chat"
+import {
+  regenerateAssistantResponse,
+  switchAssistantResponseVersion,
+} from "@/features/chat/services/responseVersionApi"
+import type {
+  ChatMessage,
+  ConversationSummary,
+} from "@/features/chat/types/chat"
 
-const conversationStorageKey = "ai-chat-conversation-id"
+const conversationStorageKey =
+  "ai-chat-conversation-id"
+
+type MessageActionType =
+  | "regenerate"
+  | "switch-version"
+  | null
 
 export function useChat() {
   const [messages, setMessages] = useState<ChatMessage[]>(() =>
@@ -23,10 +41,53 @@ export function useChat() {
       : localStorage.getItem(conversationStorageKey),
   )
 
+  const [conversations, setConversations] = useState<
+    ConversationSummary[]
+  >([])
+
   const [isResponding, setIsResponding] = useState(false)
+
   const [isLoadingHistory, setIsLoadingHistory] =
     useState(false)
+
+  const [
+    isLoadingConversations,
+    setIsLoadingConversations,
+  ] = useState(false)
+
+  const [
+    activeMessageActionId,
+    setActiveMessageActionId,
+  ] = useState<string | null>(null)
+
+  const [messageActionType, setMessageActionType] =
+    useState<MessageActionType>(null)
+
   const [error, setError] = useState<string | null>(null)
+
+  const isPerformingMessageAction =
+    activeMessageActionId !== null
+
+  const refreshConversations = useCallback(async () => {
+    setIsLoadingConversations(true)
+
+    try {
+      const response = await loadConversationThreads()
+      setConversations(response.conversations)
+    } catch (caughtError) {
+      setError(
+        caughtError instanceof Error
+          ? caughtError.message
+          : "Failed to load conversations.",
+      )
+    } finally {
+      setIsLoadingConversations(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refreshConversations()
+  }, [refreshConversations])
 
   useEffect(() => {
     if (apiConfig.useMockApi || !conversationId) {
@@ -69,6 +130,54 @@ export function useChat() {
     }
   }, [conversationId])
 
+  const selectConversation = useCallback(
+    (selectedConversationId: string) => {
+      if (
+        isResponding ||
+        isLoadingHistory ||
+        isPerformingMessageAction ||
+        selectedConversationId === conversationId
+      ) {
+        return
+      }
+
+      localStorage.setItem(
+        conversationStorageKey,
+        selectedConversationId,
+      )
+
+      setMessages([])
+      setConversationId(selectedConversationId)
+      setError(null)
+    },
+    [
+      conversationId,
+      isLoadingHistory,
+      isPerformingMessageAction,
+      isResponding,
+    ],
+  )
+
+  const startNewConversation = useCallback(() => {
+    if (
+      isResponding ||
+      isLoadingHistory ||
+      isPerformingMessageAction
+    ) {
+      return
+    }
+
+    localStorage.removeItem(conversationStorageKey)
+
+    setConversationId(null)
+    setMessages([])
+    setError(null)
+  }, [
+    isLoadingHistory,
+    isPerformingMessageAction,
+    isResponding,
+  ])
+
   const sendMessage = useCallback(
     async (content: string) => {
       const trimmedContent = content.trim()
@@ -76,7 +185,8 @@ export function useChat() {
       if (
         !trimmedContent ||
         isResponding ||
-        isLoadingHistory
+        isLoadingHistory ||
+        isPerformingMessageAction
       ) {
         return
       }
@@ -109,7 +219,9 @@ export function useChat() {
             conversationId: conversationId ?? undefined,
           },
           {
-            onConversationId: (receivedConversationId) => {
+            onConversationId: (
+              receivedConversationId,
+            ) => {
               streamConversationId =
                 receivedConversationId
             },
@@ -154,17 +266,6 @@ export function useChat() {
           result.conversationId ||
           streamConversationId
 
-        if (finalConversationId) {
-          localStorage.setItem(
-            conversationStorageKey,
-            finalConversationId,
-          )
-
-          if (finalConversationId !== conversationId) {
-            setConversationId(finalConversationId)
-          }
-        }
-
         setMessages((currentMessages) =>
           currentMessages.map((message) =>
             message.id === userMessageId ||
@@ -176,6 +277,25 @@ export function useChat() {
               : message,
           ),
         )
+
+        if (finalConversationId) {
+          localStorage.setItem(
+            conversationStorageKey,
+            finalConversationId,
+          )
+
+          if (finalConversationId !== conversationId) {
+            setConversationId(finalConversationId)
+          }
+
+          const history = await loadConversation(
+            finalConversationId,
+          )
+
+          setMessages(history.messages)
+        }
+
+        void refreshConversations()
       } catch (caughtError) {
         setMessages((currentMessages) =>
           currentMessages.map((message) =>
@@ -201,24 +321,135 @@ export function useChat() {
     [
       conversationId,
       isLoadingHistory,
+      isPerformingMessageAction,
       isResponding,
+      refreshConversations,
     ],
   )
 
-  const clearChat = useCallback(() => {
-    localStorage.removeItem(conversationStorageKey)
-    setConversationId(null)
-    setMessages([])
-    setError(null)
-  }, [])
+  const regenerateMessage = useCallback(
+    async (messageId: string) => {
+      if (
+        !conversationId ||
+        isResponding ||
+        isLoadingHistory ||
+        isPerformingMessageAction
+      ) {
+        return
+      }
+
+      setActiveMessageActionId(messageId)
+      setMessageActionType("regenerate")
+      setError(null)
+
+      try {
+        const response =
+          await regenerateAssistantResponse(
+            conversationId,
+            messageId,
+          )
+
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === messageId
+              ? response.message
+              : message,
+          ),
+        )
+
+        void refreshConversations()
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to regenerate the response.",
+        )
+      } finally {
+        setActiveMessageActionId(null)
+        setMessageActionType(null)
+      }
+    },
+    [
+      conversationId,
+      isLoadingHistory,
+      isPerformingMessageAction,
+      isResponding,
+      refreshConversations,
+    ],
+  )
+
+  const switchMessageVersion = useCallback(
+    async (
+      messageId: string,
+      versionIndex: number,
+    ) => {
+      if (
+        !conversationId ||
+        isResponding ||
+        isLoadingHistory ||
+        isPerformingMessageAction
+      ) {
+        return
+      }
+
+      setActiveMessageActionId(messageId)
+      setMessageActionType("switch-version")
+      setError(null)
+
+      try {
+        const response =
+          await switchAssistantResponseVersion(
+            conversationId,
+            messageId,
+            versionIndex,
+          )
+
+        setMessages((currentMessages) =>
+          currentMessages.map((message) =>
+            message.id === messageId
+              ? response.message
+              : message,
+          ),
+        )
+
+        void refreshConversations()
+      } catch (caughtError) {
+        setError(
+          caughtError instanceof Error
+            ? caughtError.message
+            : "Failed to switch the response version.",
+        )
+      } finally {
+        setActiveMessageActionId(null)
+        setMessageActionType(null)
+      }
+    },
+    [
+      conversationId,
+      isLoadingHistory,
+      isPerformingMessageAction,
+      isResponding,
+      refreshConversations,
+    ],
+  )
 
   return {
     messages,
     conversationId,
+    conversations,
     isResponding,
     isLoadingHistory,
+    isLoadingConversations,
+    isPerformingMessageAction,
+    activeMessageActionId,
+    messageActionType,
     error,
     sendMessage,
-    clearChat,
+    regenerateMessage,
+    switchMessageVersion,
+    selectConversation,
+    startNewConversation,
+    clearChat: startNewConversation,
+    refreshConversations,
   }
 }

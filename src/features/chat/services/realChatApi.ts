@@ -2,23 +2,44 @@ import { apiConfig } from "@/config/api"
 import type {
   ChatMessage,
   ChatRole,
+  ChatSource,
   ConversationHistoryResponse,
+  FeedbackRating,
   SendMessageRequest,
   SendMessageResponse,
   StreamMessageHandlers,
   StreamMessageResult,
 } from "@/features/chat/types/chat"
 
+interface ApiMessageVersion {
+  id: string
+  content: string
+  createdAt: string
+  sources?: ChatSource[]
+}
+
+interface ApiMessageFeedback {
+  rating: FeedbackRating
+  comment: string
+  createdAt: string
+  updatedAt: string
+}
+
 interface ApiMessage {
   id: string
   role: ChatRole
   content: string
   createdAt: string
+  sources?: ChatSource[]
+  versions?: ApiMessageVersion[]
+  activeVersionIndex?: number
+  feedback?: ApiMessageFeedback
 }
 
 interface ApiSendMessageResponse {
   conversationId: string
   reply: string
+  sources?: ChatSource[]
   messages: ApiMessage[]
 }
 
@@ -36,13 +57,27 @@ interface ApiStreamEventData {
   message?: string
 }
 
-function toChatMessage(message: ApiMessage): ChatMessage {
+function toChatMessage(
+  message: ApiMessage,
+): ChatMessage {
   return {
     id: message.id,
     role: message.role,
     content: message.content,
     createdAt: message.createdAt,
     status: "sent",
+    sources: message.sources,
+    versions: message.versions?.map(
+      (version) => ({
+        id: version.id,
+        content: version.content,
+        createdAt: version.createdAt,
+        sources: version.sources,
+      }),
+    ),
+    activeVersionIndex:
+      message.activeVersionIndex,
+    feedback: message.feedback,
   }
 }
 
@@ -54,7 +89,10 @@ async function getErrorMessage(
       error?: string
     }
 
-    return data.error || "The server returned an unexpected error."
+    return (
+      data.error ||
+      "The server returned an unexpected error."
+    )
   } catch {
     return "The server returned an unexpected error."
   }
@@ -63,16 +101,21 @@ async function getErrorMessage(
 export async function sendRealMessage(
   request: SendMessageRequest,
 ): Promise<SendMessageResponse> {
-  const response = await fetch(`${apiConfig.baseUrl}/chat`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
+  const response = await fetch(
+    `${apiConfig.baseUrl}/chat`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(request),
     },
-    body: JSON.stringify(request),
-  })
+  )
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(
+      await getErrorMessage(response),
+    )
   }
 
   const data =
@@ -80,7 +123,10 @@ export async function sendRealMessage(
 
   const assistantMessage = [...data.messages]
     .reverse()
-    .find((message) => message.role === "assistant")
+    .find(
+      (message) =>
+        message.role === "assistant",
+    )
 
   if (!assistantMessage) {
     throw new Error(
@@ -88,9 +134,17 @@ export async function sendRealMessage(
     )
   }
 
+  const mappedAssistantMessage =
+    toChatMessage(assistantMessage)
+
   return {
     conversationId: data.conversationId,
-    message: toChatMessage(assistantMessage),
+    message: {
+      ...mappedAssistantMessage,
+      sources:
+        mappedAssistantMessage.sources ??
+        data.sources,
+    },
   }
 }
 
@@ -111,7 +165,9 @@ export async function streamRealMessage(
   )
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(
+      await getErrorMessage(response),
+    )
   }
 
   if (!response.body) {
@@ -124,11 +180,15 @@ export async function streamRealMessage(
   const decoder = new TextDecoder()
 
   let buffer = ""
+
   let resolvedConversationId =
     request.conversationId || ""
 
   while (true) {
-    const { value, done } = await reader.read()
+    const {
+      value,
+      done,
+    } = await reader.read()
 
     if (done) {
       break
@@ -140,7 +200,8 @@ export async function streamRealMessage(
 
     buffer = buffer.replace(/\r\n/g, "\n")
 
-    const eventBlocks = buffer.split("\n\n")
+    const eventBlocks =
+      buffer.split("\n\n")
 
     buffer = eventBlocks.pop() || ""
 
@@ -151,13 +212,20 @@ export async function streamRealMessage(
 
       const lines = eventBlock.split("\n")
 
-      const eventLine = lines.find((line) =>
-        line.startsWith("event:"),
+      const eventLine = lines.find(
+        (line) =>
+          line.startsWith("event:"),
       )
 
       const dataLines = lines
-        .filter((line) => line.startsWith("data:"))
-        .map((line) => line.slice(5).trim())
+        .filter(
+          (line) =>
+            line.startsWith("data:"),
+        )
+        .map(
+          (line) =>
+            line.slice(5).trim(),
+        )
 
       if (dataLines.length === 0) {
         continue
@@ -183,8 +251,13 @@ export async function streamRealMessage(
         )
       }
 
-      if (eventName === "chunk" && eventData.text) {
-        handlers.onChunk(eventData.text)
+      if (
+        eventName === "chunk" &&
+        eventData.text
+      ) {
+        handlers.onChunk(
+          eventData.text,
+        )
       }
 
       if (eventName === "done") {
@@ -210,7 +283,8 @@ export async function streamRealMessage(
   }
 
   return {
-    conversationId: resolvedConversationId,
+    conversationId:
+      resolvedConversationId,
   }
 }
 
@@ -224,16 +298,20 @@ export async function getRealConversation(
   )
 
   if (!response.ok) {
-    throw new Error(await getErrorMessage(response))
+    throw new Error(
+      await getErrorMessage(response),
+    )
   }
 
   const data =
     (await response.json()) as ApiConversationHistoryResponse
 
   return {
-    conversationId: data.conversationId,
+    conversationId:
+      data.conversationId,
     title: data.title,
-    messages: data.messages.map(toChatMessage),
+    messages:
+      data.messages.map(toChatMessage),
     createdAt: data.createdAt,
     updatedAt: data.updatedAt,
   }
