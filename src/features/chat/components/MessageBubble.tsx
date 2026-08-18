@@ -1,9 +1,22 @@
 import {
+  isValidElement,
+  useState,
+} from "react"
+import type {
+  ComponentPropsWithoutRef,
+  ReactNode,
+} from "react"
+import {
   AlertCircle,
   Bot,
+  Check,
+  Copy,
   LoaderCircle,
   User,
 } from "lucide-react"
+import ReactMarkdown from "react-markdown"
+import rehypeHighlight from "rehype-highlight"
+import remarkGfm from "remark-gfm"
 
 import {
   Avatar,
@@ -11,6 +24,7 @@ import {
 } from "@/components/ui/avatar"
 import { Separator } from "@/components/ui/separator"
 import type { ChatMessage } from "@/features/chat/types/chat"
+import "@/features/chat/styles/markdown.css"
 import { cn } from "@/lib/utils"
 
 interface MessageBubbleProps {
@@ -22,6 +36,105 @@ function formatMessageTime(createdAt: string) {
     hour: "2-digit",
     minute: "2-digit",
   }).format(new Date(createdAt))
+}
+
+function extractText(node: ReactNode): string {
+  if (
+    typeof node === "string" ||
+    typeof node === "number"
+  ) {
+    return String(node)
+  }
+
+  if (Array.isArray(node)) {
+    return node.map(extractText).join("")
+  }
+
+  if (
+    isValidElement<{
+      children?: ReactNode
+    }>(node)
+  ) {
+    return extractText(node.props.children)
+  }
+
+  return ""
+}
+
+function MarkdownCodeBlock({
+  children,
+}: ComponentPropsWithoutRef<"pre">) {
+  const [isCopied, setIsCopied] = useState(false)
+
+  const codeText = extractText(children).replace(/\n$/, "")
+
+  async function copyCode() {
+    try {
+      await navigator.clipboard.writeText(codeText)
+      setIsCopied(true)
+
+      window.setTimeout(() => {
+        setIsCopied(false)
+      }, 1800)
+    } catch {
+      setIsCopied(false)
+    }
+  }
+
+  return (
+    <div className="markdown-code-block">
+      <button
+        type="button"
+        className="markdown-copy-button"
+        onClick={copyCode}
+        aria-label="Copy code to clipboard"
+        title="Copy code"
+      >
+        {isCopied ? (
+          <>
+            <Check className="size-3.5" />
+            Copied
+          </>
+        ) : (
+          <>
+            <Copy className="size-3.5" />
+            Copy
+          </>
+        )}
+      </button>
+
+      <pre>{children}</pre>
+    </div>
+  )
+}
+
+function AssistantMarkdown({
+  content,
+}: {
+  content: string
+}) {
+  return (
+    <div className="markdown-content">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        rehypePlugins={[rehypeHighlight]}
+        components={{
+          pre: MarkdownCodeBlock,
+          a: ({ href, children }) => (
+            <a
+              href={href}
+              target="_blank"
+              rel="noreferrer"
+            >
+              {children}
+            </a>
+          ),
+        }}
+      >
+        {content}
+      </ReactMarkdown>
+    </div>
+  )
 }
 
 export function MessageBubble({
@@ -54,8 +167,10 @@ export function MessageBubble({
 
       <div
         className={cn(
-          "max-w-[80%] sm:max-w-[70%]",
-          isUserMessage && "items-end",
+          "min-w-0",
+          isUserMessage
+            ? "max-w-[80%] sm:max-w-[70%]"
+            : "max-w-[88%] sm:max-w-[82%]",
         )}
       >
         <div
@@ -66,9 +181,13 @@ export function MessageBubble({
               : "rounded-tl-sm border bg-card text-card-foreground",
           )}
         >
-          <p className="whitespace-pre-wrap leading-6">
-            {message.content}
-          </p>
+          {isUserMessage ? (
+            <p className="whitespace-pre-wrap leading-6">
+              {message.content}
+            </p>
+          ) : (
+            <AssistantMarkdown content={message.content} />
+          )}
 
           {message.sources && message.sources.length > 0 && (
             <div className="mt-3">
@@ -83,6 +202,7 @@ export function MessageBubble({
                   <li
                     key={`${source.title}-${index}`}
                     className="text-xs opacity-80"
+                    title={source.url ?? source.title}
                   >
                     {source.url ? (
                       <a
