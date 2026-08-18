@@ -1,13 +1,69 @@
-import { useCallback, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
+import { apiConfig } from "@/config/api"
 import { mockMessages } from "@/features/chat/data/mockMessages"
-import { sendMessage as sendChatMessage } from "@/features/chat/services/chatApi"
+import {
+  loadConversation,
+  sendMessage as sendChatMessage,
+} from "@/features/chat/services/chatApi"
 import type { ChatMessage } from "@/features/chat/types/chat"
 
+const conversationStorageKey = "ai-chat-conversation-id"
+
 export function useChat() {
-  const [messages, setMessages] = useState<ChatMessage[]>(mockMessages)
+  const [messages, setMessages] = useState<ChatMessage[]>(() =>
+    apiConfig.useMockApi ? mockMessages : [],
+  )
+
+  const [conversationId, setConversationId] = useState<string | null>(
+    () =>
+      apiConfig.useMockApi
+        ? null
+        : localStorage.getItem(conversationStorageKey),
+  )
+
   const [isResponding, setIsResponding] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (apiConfig.useMockApi || !conversationId) {
+      return
+    }
+
+    let isCancelled = false
+
+    async function restoreConversation() {
+      setIsLoadingHistory(true)
+      setError(null)
+
+      try {
+        const history = await loadConversation(conversationId!)
+
+        if (!isCancelled) {
+          setMessages(history.messages)
+        }
+      } catch (caughtError) {
+        if (!isCancelled) {
+          setError(
+            caughtError instanceof Error
+              ? caughtError.message
+              : "Failed to load the conversation history.",
+          )
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingHistory(false)
+        }
+      }
+    }
+
+    void restoreConversation()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [conversationId])
 
   const sendMessage = useCallback(
     async (content: string) => {
@@ -38,7 +94,20 @@ export function useChat() {
       try {
         const response = await sendChatMessage({
           message: trimmedContent,
+          conversationId: conversationId ?? undefined,
         })
+
+        if (
+          response.conversationId &&
+          response.conversationId !== conversationId
+        ) {
+          localStorage.setItem(
+            conversationStorageKey,
+            response.conversationId,
+          )
+
+          setConversationId(response.conversationId)
+        }
 
         setMessages((currentMessages) => [
           ...currentMessages.map((message) =>
@@ -66,17 +135,21 @@ export function useChat() {
         setIsResponding(false)
       }
     },
-    [isResponding],
+    [conversationId, isResponding],
   )
 
   const clearChat = useCallback(() => {
+    localStorage.removeItem(conversationStorageKey)
+    setConversationId(null)
     setMessages([])
     setError(null)
   }, [])
 
   return {
     messages,
+    conversationId,
     isResponding,
+    isLoadingHistory,
     error,
     sendMessage,
     clearChat,

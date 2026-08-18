@@ -18,8 +18,18 @@ export interface ChatMessage {
 
 export interface SendMessageRequest {
   message: string
+  conversationId?: string
 }
 
 export interface SendMessageResponse {
+  conversationId?: string
   message: ChatMessage
+}
+
+export interface ConversationHistoryResponse {
+  conversationId: string
+  title: string
+  messages: ChatMessage[]
+  createdAt: string
+  updatedAt: string
 }
